@@ -2,28 +2,24 @@ import asyncio
 import logging
 import os
 
-import google.generativeai as genai
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
+from groq import AsyncGroq
 
 from prompts import SYSTEM_PROMPT
 
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 logging.basicConfig(level=logging.INFO)
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel(
-    model_name=GEMINI_MODEL,
-    system_instruction=SYSTEM_PROMPT,
-)
+groq_client = AsyncGroq(api_key=GROQ_API_KEY)
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -87,10 +83,16 @@ async def generate_message(callback: CallbackQuery) -> None:
     await bot.send_chat_action(chat_id, "typing")
 
     try:
-        response = await model.generate_content_async(f"{user_input}\n\n{lang_instruction}")
-        result_text = response.text.strip()
+        response = await groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"{user_input}\n\n{lang_instruction}"},
+            ],
+        )
+        result_text = response.choices[0].message.content.strip()
     except Exception:
-        logging.exception("Gemini API xatosi")
+        logging.exception("Groq API xatosi")
         await callback.message.answer(
             "Kechirasiz, xabar tayyorlashda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
         )
